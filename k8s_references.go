@@ -45,6 +45,28 @@ func (ref ObjectRef) MarshalLog() interface{} {
 
 var _ logr.Marshaler = ObjectRef{}
 
+// ObjectRef2 references a kubernetes object
+type ObjectRef2 struct {
+	KMetadata
+}
+
+func (ref ObjectRef2) String() string {
+	namespace := ref.GetNamespace()
+	if namespace != "" {
+		return fmt.Sprintf("%s/%s", namespace, ref.GetName())
+	}
+	return ref.GetName()
+}
+
+// MarshalLog ensures that loggers with support for structured output will log
+// as a struct by removing the String method via a custom type.
+func (ref ObjectRef2) MarshalLog() interface{} {
+	type or ObjectRef2
+	return or(ref)
+}
+
+var _ logr.Marshaler = ObjectRef2{}
+
 // KMetadata is a subset of the kubernetes k8s.io/apimachinery/pkg/apis/meta/v1.Object interface
 // this interface may expand in the future, but will always be a subset of the
 // kubernetes k8s.io/apimachinery/pkg/apis/meta/v1.Object interface
@@ -68,6 +90,18 @@ func KObj(obj KMetadata) ObjectRef {
 	}
 }
 
+// KObj returns ObjectRef from ObjectMeta
+func KObj2(obj KMetadata) ObjectRef2 {
+	if obj == nil {
+		return ObjectRef2{}
+	}
+	if val := reflect.ValueOf(obj); val.Kind() == reflect.Ptr && val.IsNil() {
+		return ObjectRef2{}
+	}
+
+	return ObjectRef2{KMetadata: obj}
+}
+
 // KRef returns ObjectRef from name and namespace
 func KRef(namespace, name string) ObjectRef {
 	return ObjectRef{
@@ -77,15 +111,15 @@ func KRef(namespace, name string) ObjectRef {
 }
 
 // KObjs returns slice of ObjectRef from an slice of ObjectMeta
-func KObjs(arg interface{}) []ObjectRef {
+func KObjs(arg interface{}) []ObjectRef2 {
 	s := reflect.ValueOf(arg)
 	if s.Kind() != reflect.Slice {
 		return nil
 	}
-	objectRefs := make([]ObjectRef, 0, s.Len())
+	objectRefs := make([]ObjectRef2, 0, s.Len())
 	for i := 0; i < s.Len(); i++ {
 		if v, ok := s.Index(i).Interface().(KMetadata); ok {
-			objectRefs = append(objectRefs, KObj(v))
+			objectRefs = append(objectRefs, KObj2(v))
 		} else {
 			return nil
 		}
